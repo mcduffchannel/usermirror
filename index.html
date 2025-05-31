@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Deep Visitor Fingerprint</title>
+  <style>
+    body {
+      background: #121212;
+      color: #f1f1f1;
+      font-family: monospace;
+      padding: 2em;
+    }
+    h1 {
+      color: #00ffff;
+    }
+    pre {
+      background: #1e1e1e;
+      padding: 1em;
+      border-radius: 10px;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>Deep Visitor Fingerprint</h1>
+  <pre id="output">Collecting data...</pre>
+
+  <script>
+    async function getFingerprint() {
+      const out = {};
+
+      // User Agent Info
+      out.userAgent = navigator.userAgent;
+      out.platform = navigator.platform;
+      out.deviceMemory = navigator.deviceMemory || 'N/A';
+      out.hardwareConcurrency = navigator.hardwareConcurrency;
+      out.language = navigator.language;
+      out.languages = navigator.languages;
+      out.cookieEnabled = navigator.cookieEnabled;
+      out.javaEnabled = navigator.javaEnabled?.();
+      out.plugins = [...navigator.plugins].map(p => p.name);
+
+      // Time & Intl
+      out.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      out.timezoneOffset = new Date().getTimezoneOffset();
+      out.localTime = new Date().toString();
+
+      // Screen Info
+      out.screen = {
+        width: screen.width,
+        height: screen.height,
+        colorDepth: screen.colorDepth,
+        pixelDepth: screen.pixelDepth,
+        pixelRatio: window.devicePixelRatio
+      };
+
+      // Window Sizes
+      out.window = {
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        outerWidth: window.outerWidth,
+        outerHeight: window.outerHeight
+      };
+
+      // Canvas Fingerprint
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = 200; canvas.height = 50;
+      ctx.textBaseline = 'top';
+      ctx.font = "14px 'Arial'";
+      ctx.fillStyle = '#f60';
+      ctx.fillRect(0, 0, 200, 50);
+      ctx.fillStyle = '#069';
+      ctx.fillText('Visitor Fingerprint', 2, 2);
+      out.canvasHash = canvas.toDataURL();
+
+      // WebGL Info
+      try {
+        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+        const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+        out.webgl = {
+          vendor: gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL),
+          renderer: gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
+        };
+      } catch (e) {
+        out.webgl = 'WebGL not available';
+      }
+
+      // Audio Fingerprint
+      try {
+        const audioCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, 44100, 44100);
+        const osc = audioCtx.createOscillator();
+        const comp = audioCtx.createDynamicsCompressor();
+        osc.type = 'triangle';
+        osc.frequency.value = 10000;
+        osc.connect(comp);
+        comp.connect(audioCtx.destination);
+        osc.start(0);
+        audioCtx.startRendering();
+        const buffer = await new Promise(r => {
+          audioCtx.oncomplete = e => r(e.renderedBuffer.getChannelData(0).slice(0, 30));
+        });
+        out.audioFingerprint = buffer.reduce((acc, val) => acc + Math.abs(val), 0).toFixed(6);
+      } catch (e) {
+        out.audioFingerprint = 'Unavailable';
+      }
+
+      // Performance Info
+      out.performance = {
+        timing: performance.timing.toJSON?.() || performance.timing,
+        memory: performance.memory || 'Unavailable'
+      };
+
+      // Fonts Detection (basic)
+      const testFont = (font) => {
+        const base = 'monospace';
+        const span = document.createElement('span');
+        span.style.fontFamily = base;
+        span.style.position = 'absolute';
+        span.style.left = '-9999px';
+        span.innerText = 'mmmmmmmmmmmmm';
+        document.body.appendChild(span);
+        const baseWidth = span.offsetWidth;
+        span.style.fontFamily = `${font},${base}`;
+        const result = span.offsetWidth !== baseWidth;
+        document.body.removeChild(span);
+        return result;
+      };
+      out.fonts = ['Arial', 'Courier New', 'Georgia', 'Times New Roman', 'Comic Sans MS', 'Verdana', 'Tahoma']
+        .filter(testFont);
+
+      // Geolocation
+      try {
+        const pos = await new Promise((res, rej) =>
+          navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 })
+        );
+        out.geolocation = {
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+          accuracy: pos.coords.accuracy
+        };
+      } catch {
+        out.geolocation = 'Permission denied or unavailable';
+      }
+
+      // IP Address
+      try {
+        const ipData = await fetch('https://api.ipify.org?format=json').then(res => res.json());
+        out.ip = ipData.ip;
+      } catch {
+        out.ip = 'Unavailable';
+      }
+
+      document.getElementById('output').textContent = JSON.stringify(out, null, 2);
+    }
+
+    getFingerprint();
+  </script>
+</body>
+</html>
